@@ -116,19 +116,27 @@ def check_website(url):
         status_code = response.status_code
         content_lower = response.text.lower()
         
-        # Check for obvious parked/broken markers first
+        # Check for obvious parked/broken markers
         parked_keywords = [
             "domain has expired", "domain is expired", "this domain is for sale", 
             "buy this domain", "parked domain", "domain parked", "account suspended",
-            "this site is currently unavailable", "website expired", "default webpage"
+            "this site is currently unavailable", "website expired", "default webpage",
+            "future home of something quite cool", "coming soon", "under construction"
         ]
-        if any(kw in content_lower for kw in parked_keywords) or status_code >= 400:
-            if status_code not in [403, 401]: # Don't give up on access denied yet
-                return "Broken Link"
+        
+        if any(kw in content_lower for kw in parked_keywords):
+            return "Broken Link"
+            
+        # EARLY EXIT: If site is clearly active, return immediately
+        if 200 <= status_code < 300 and not any(kw in content_lower for kw in ["just a moment", "cloudflare", "security measure"]):
+            return "Verified Active"
+            
+        if status_code >= 400 and status_code not in [403, 401]:
+            return "Broken Link"
     except Exception:
         pass # Fallback to Playwright if requests fails or is blocked
 
-    # 2. BROWSER-BASED CHECK (Only if necessary)
+    # 2. BROWSER-BASED CHECK (Only for tricky or protected sites)
     max_retries = 2
     for attempt in range(max_retries):
         try:
@@ -362,8 +370,8 @@ def run_serper_scan(keyword: str, location: str, radius: int, filter_option: str
                     if filter_option == "broken_website" and res['status'] != "Broken Link":
                         continue
                         
-                    # If target was no_or_broken, discard active ones
-                    if filter_option == "no_or_broken_website" and res['status'] == "Verified Active":
+                    # If target was no_or_broken, discard active or protected ones
+                    if filter_option == "no_or_broken_website" and res['status'] in ["Verified Active", "Protected"]:
                         continue
                         
                     verified_data.append(res)
