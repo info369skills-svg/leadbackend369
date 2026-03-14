@@ -1,6 +1,6 @@
-oauth2client
-gspread
-google-auth
 fastapi
 uvicorn
+gspread
+google-auth
 requests
+python-multipart

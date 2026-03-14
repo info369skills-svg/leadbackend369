@@ -5,7 +5,7 @@ import traceback
 import gspread
 import re
 import concurrent.futures
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -34,13 +34,15 @@ def append_to_google_sheet(leads_data: list, sheet_url: str = None, sheet_tab: s
             "https://www.googleapis.com/auth/drive"
         ]
         
-        creds_path = os.path.join(os.path.dirname(__file__), "service_account.json")
-        
-        if not os.path.exists(creds_path):
-            print(f"\\n[Warning] Google Sheets integration skipped. Missing: {creds_path}")
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if not creds_json:
+            print("\n[ERROR] GOOGLE_CREDENTIALS environment variable is not set!")
             return False
             
-        creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+        creds_dict = json.loads(creds_json)
+        
+        # Direct dictionary from credentials authorize
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
         target_sheet = sheet_url if sheet_url else DEFAULT_GOOGLE_SHEET_NAME
