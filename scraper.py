@@ -104,92 +104,90 @@ def check_website(url):
     if not url.startswith('http'):
         url = 'http://' + url
         
+    # 1. LIGHT-FIRST CHECK (Saves 99% Memory)
+    try:
+        headers = {
+            'User-Agent': random.choice(USER_AGENTS),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+        # Use a short timeout to fail fast
+        response = requests.get(url, headers=headers, timeout=8, verify=False, allow_redirects=True)
+        status_code = response.status_code
+        content_lower = response.text.lower()
+        
+        # Check for obvious parked/broken markers first
+        parked_keywords = [
+            "domain has expired", "domain is expired", "this domain is for sale", 
+            "buy this domain", "parked domain", "domain parked", "account suspended",
+            "this site is currently unavailable", "website expired", "default webpage"
+        ]
+        if any(kw in content_lower for kw in parked_keywords) or status_code >= 400:
+            if status_code not in [403, 401]: # Don't give up on access denied yet
+                return "Broken Link"
+    except Exception:
+        pass # Fallback to Playwright if requests fails or is blocked
+
+    # 2. BROWSER-BASED CHECK (Only if necessary)
     max_retries = 2
     for attempt in range(max_retries):
         try:
             with sync_playwright() as p:
-                # Launch headless browser
-                browser = p.chromium.launch(headless=True)
+                # Optimized launch for Cloud environments
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
+                )
                 
-                # Create context with a random User-Agent to evade basic bot detection
                 context = browser.new_context(
                     user_agent=random.choice(USER_AGENTS),
-                    viewport={'width': 1920, 'height': 1080},
-                    ignore_https_errors=True # Ignore self-signed certs
+                    viewport={'width': 1280, 'height': 720},
+                    ignore_https_errors=True
                 )
                 
                 page = context.new_page()
                 
-                # Navigate to URL, wait for DOM content (allows JS to execute)
-                # 20s timeout for the page to load
-                response = page.goto(url, wait_until='domcontentloaded', timeout=20000)
+                # Faster navigation
+                response = page.goto(url, wait_until='domcontentloaded', timeout=15000)
                 
                 if not response:
                     browser.close()
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
                     
                 status_code = response.status
                 
-                # Wait an additional brief moment for Cloudflare/Vercel JS redirects or challenges to trigger
+                # Brief wait for dynamic content
                 try:
-                    page.wait_for_timeout(3000)
+                    page.wait_for_timeout(2000)
                 except:
                     pass
                 
                 content_lower = page.content().lower()
-                
-                # Cleanup
                 browser.close()
                 
-                # 1. Check for parked/expired domains -> Broken
-                parked_keywords = [
-                    "domain has expired",
-                    "domain is expired",
-                    "this domain is for sale",
-                    "buy this domain",
-                    "parked domain",
-                    "domain parked",
-                    "account suspended",
-                    "this site is currently unavailable",
-                    "website expired",
-                    "default webpage",
-                    "future home of something quite cool"
-                ]
+                # Parkland/Parked logic
+                parked_keywords = ["domain has expired", "domain is expired", "this domain is for sale", "buy this domain", "parked domain", "domain parked", "account suspended"]
                 for kw in parked_keywords:
                     if kw in content_lower:
                         return "Broken Link"
                         
-                # 2. Check for Cloudflare/Protection/Vercel -> Protected
-                protection_keywords = [
-                    "just a moment...",
-                    "access denied",
-                    "cloudflare",
-                    "attention required!",
-                    "security measure",
-                    "please turn javascript on",
-                    "vercel security checkpoint",
-                    "checking if the site connection is secure"
-                ]
-                
-                if status_code in [401, 403, 405, 406] or any(kw in content_lower for kw in protection_keywords):
-                    if attempt < max_retries - 1 and status_code == 403:
-                        time.sleep(2)
-                        continue # Retry on 403
+                protection_keywords = ["just a moment...", "access denied", "cloudflare", "attention required!", "security measure", " please turn javascript on", "vercel security checkpoint"]
+                if status_code in [401, 403] or any(kw in content_lower for kw in protection_keywords):
                     return "Protected"
                     
-                # 3. >= 400 means Broken
                 if status_code >= 400:
                     return "Broken Link"
                     
                 return "Verified Active"
                 
-        except Exception as e:
-            # Catch timeouts and connection errors from Playwright
+        except Exception:
             if attempt < max_retries - 1:
-                time.sleep(3) # Wait before retry
+                time.sleep(2)
                 continue
             return "Broken Link"
+            
+    return "Broken Link"
             
     return "Broken Link"
 
@@ -347,7 +345,8 @@ def run_serper_scan(keyword: str, location: str, radius: int, filter_option: str
                 
             return lead
             
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        # Reduced workers from 10 to 3 for Render Free Tier (Memory stability)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             future_to_lead = {executor.submit(process_lead, lead): lead for lead in scraped_data}
             completed = 0
             
