@@ -5,6 +5,10 @@ from scraper import run_serper_scan, append_to_google_sheet
 
 app = FastAPI()
 
+@app.get("/")
+def home():
+    return {"status": "online", "message": "LeadScanner Backend is running."}
+
 # React ke liye CORS permission
 app.add_middleware(
     CORSMiddleware,
