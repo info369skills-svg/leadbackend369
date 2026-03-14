@@ -194,10 +194,6 @@ def check_website(url):
                 time.sleep(2)
                 continue
             return "Broken Link"
-            
-    return "Broken Link"
-            
-    return "Broken Link"
 
 
 def run_serper_scan(keyword: str, location: str, radius: int, filter_option: str = "all", search_type: str = "places", api_key: str = None):
