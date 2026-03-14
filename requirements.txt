@@ -1,6 +1,6 @@
-fastapi
-uvicorn
+oauth2client
 gspread
 google-auth
+fastapi
+uvicorn
 requests
-python-multipart
